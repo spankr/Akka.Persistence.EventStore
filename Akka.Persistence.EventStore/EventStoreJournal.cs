@@ -183,7 +183,7 @@ namespace Akka.Persistence.EventStore
         protected override Task DeleteMessagesToAsync(string persistenceId, long toSequenceNr)
         {
             // no-op
-            return Task.FromResult<object>(null);
+            return Task.Run(()=> { });
         }
 
         class ActorRefConverter : JsonConverter
