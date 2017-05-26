@@ -1,22 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Akka.Actor;
-using Akka.TestKit;
-using Akka.Persistence;
-using Akka.Persistence.Journal;
+﻿using Akka.Persistence.TestKit.Journal;
 using Xunit;
-using Akka.Persistence.TestKit.Journal;
-using Akka.Configuration;
 
 
 namespace Akka.Persistence.EventStore.Tests
 {
-    public partial class EventStoreJournalSpec : JournalSpec
+    [Collection("EventStore")]
+    public class EventStoreJournalSpec : JournalSpec
     {
-        private static readonly Config SpecConfig = ConfigurationFactory.ParseString(@"
+        private static readonly string SpecConfig = @"
             akka {
                 stdout-loglevel = DEBUG
 	            loglevel = DEBUG
@@ -28,7 +19,7 @@ namespace Akka.Persistence.EventStore.Tests
                 journal {
                     plugin = ""akka.persistence.journal.event-store""
                     event-store {
-                        class = ""EventStore.Persistence.EventStoreJournal, Akka.Persistence.EventStore""
+                        class = ""Akka.Persistence.EventStore.EventStoreJournal, Akka.Persistence.EventStore""
                         plugin-dispatcher = ""akka.actor.default-dispatcher""
                         
                         # the event store connection string
@@ -39,10 +30,9 @@ namespace Akka.Persistence.EventStore.Tests
                     }
                 }
             }
-        }
-        ");
-        public EventStoreJournalSpec()
-            : base(SpecConfig, "EventStoreJournalSpec") 
+        }";
+
+        public EventStoreJournalSpec() : base(SpecConfig, "EventStoreJournalSpec")
         {
             Initialize();
         }
