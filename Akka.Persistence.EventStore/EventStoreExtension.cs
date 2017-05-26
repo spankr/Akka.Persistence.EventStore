@@ -87,7 +87,7 @@ namespace Akka.Persistence.EventStore
         /// <returns></returns>
         public static Config DefaultConfiguration()
         {
-            return ConfigurationFactory.FromResource<EventStorePersistence>("Akka.Persistence.EventStore.refernce.conf");
+            return ConfigurationFactory.FromResource<EventStorePersistence>("Akka.Persistence.EventStore.reference.conf");
         }
     }
 }

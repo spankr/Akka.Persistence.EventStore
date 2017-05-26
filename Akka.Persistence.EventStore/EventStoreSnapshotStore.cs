@@ -101,13 +101,13 @@ namespace Akka.Persistence.EventStore
         protected override Task DeleteAsync(SnapshotMetadata metadata)
         {
             // no-op
-            return Task.FromResult<object>(null);
+            return Task.Run(() => { });
         }
 
         protected override Task DeleteAsync(string persistenceId, SnapshotSelectionCriteria criteria)
         {
             // no-op
-            return Task.FromResult<object>(null);
+            return Task.Run(() => { });
         }
 
         public class StreamMetadata
