@@ -1,18 +1,16 @@
-﻿using System;
+﻿using Akka.Actor;
+using Akka.Event;
+using Akka.Persistence;
+using Akka.Persistence.EventStore;
+using Akka.Persistence.Journal;
+using EventStore.ClientAPI;
+using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net;
 using System.Runtime.Serialization.Formatters;
 using System.Text;
 using System.Threading.Tasks;
-using Akka.Actor;
-using Akka.Event;
-using Akka.Persistence;
-using Akka.Persistence.Journal;
-using EventStore.ClientAPI;
-using EventStore.ClientAPI.SystemData;
-using Newtonsoft.Json;
-using Akka.Persistence.EventStore;
 
 namespace EventStore.Persistence
 {
@@ -92,7 +90,7 @@ namespace EventStore.Persistence
                 if (toSequenceNr > fromSequenceNr && max == toSequenceNr) max = toSequenceNr - fromSequenceNr + 1;
                 var connection = await GetConnection();
                 long count = 0;
-                int start = ((int) fromSequenceNr-1);
+                int start = ((int)fromSequenceNr-1);
                 var localBatchSize = _batchSize;
                 StreamEventsSlice slice;
                 do
