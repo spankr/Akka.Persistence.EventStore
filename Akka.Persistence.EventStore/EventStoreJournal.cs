@@ -1,31 +1,34 @@
-﻿using Akka.Actor;
-using Akka.Event;
-using Akka.Persistence;
-using Akka.Persistence.EventStore;
-using Akka.Persistence.Journal;
-using EventStore.ClientAPI;
-using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Runtime.Serialization.Formatters;
 using System.Text;
 using System.Threading.Tasks;
+using Akka.Actor;
+using Akka.Event;
+using Akka.Persistence.Journal;
+using EventStore.ClientAPI;
+using Newtonsoft.Json;
 
-namespace EventStore.Persistence
+namespace Akka.Persistence.EventStore
 {
     public class EventStoreJournal : AsyncWriteJournal
     {
         private int _batchSize = 500;
-        private readonly Lazy<Task<IEventStoreConnection>> _connection;
-        private readonly JsonSerializerSettings _serializerSettings;
-        private ILoggingAdapter _log;
+        private readonly ILoggingAdapter _log = Logging.GetLogger(Context);
         private readonly EventStorePersistenceExtension _extension;
+        private Lazy<Task<IEventStoreConnection>> _connection;
+        private JsonSerializerSettings _serializerSettings;
 
         public EventStoreJournal()
         {
-            _log = Context.GetLogger();
             _extension = EventStorePersistence.Instance.Apply(Context.System);
+        }
+
+        protected override void PreStart()
+        {
+            base.PreStart();
 
             _serializerSettings = new JsonSerializerSettings
             {
@@ -46,7 +49,7 @@ namespace EventStore.Persistence
                     await connection.ConnectAsync();
                     return connection;
                 }
-                catch(Exception exc)
+                catch (Exception exc)
                 {
                     _log.Error(exc.ToString());
                     return null;
@@ -81,7 +84,7 @@ namespace EventStore.Persistence
             }
         }
 
-        public override async Task ReplayMessagesAsync(string persistenceId, long fromSequenceNr, long toSequenceNr, long max, Action<IPersistentRepresentation> replayCallback)
+        public override async Task ReplayMessagesAsync(IActorContext context, string persistenceId, long fromSequenceNr, long toSequenceNr, long max, Action<IPersistentRepresentation> replayCallback)
         {
             try
             {
@@ -90,7 +93,7 @@ namespace EventStore.Persistence
                 if (toSequenceNr > fromSequenceNr && max == toSequenceNr) max = toSequenceNr - fromSequenceNr + 1;
                 var connection = await GetConnection();
                 long count = 0;
-                int start = ((int)fromSequenceNr-1);
+                int start = ((int)fromSequenceNr - 1);
                 var localBatchSize = _batchSize;
                 StreamEventsSlice slice;
                 do
@@ -113,7 +116,7 @@ namespace EventStore.Persistence
                         count++;
                         if (count == max) return;
                     }
-                
+
                     start = slice.NextEventNumber;
 
                 } while (!slice.IsEndOfStream);
@@ -125,42 +128,48 @@ namespace EventStore.Persistence
             }
         }
 
-        protected override async Task WriteMessagesAsync(IEnumerable<IPersistentRepresentation> messages)
+        protected override async Task<IImmutableList<Exception>> WriteMessagesAsync(IEnumerable<Akka.Persistence.AtomicWrite> messages)
         {
-            try
+            var messageList = messages.ToList();
+            var writeTasks = messageList.Select(async message =>
             {
-                foreach (var grouping in messages.GroupBy(x => x.PersistenceId))
+                await Task.Run(async () =>
                 {
-                    var stream = grouping.Key;
+                    var persistentMessages = ((IImmutableList<IPersistentRepresentation>)message.Payload).ToArray();
 
-                    var representations = grouping.OrderBy(x => x.SequenceNr).ToArray();
-                    var expectedVersion = (int)representations.First().SequenceNr - 2;
-
-                    var events = representations.Select(x =>
+                    foreach (var grouping in persistentMessages.GroupBy(x => x.PersistenceId))
                     {
-                        var eventId = GuidUtility.Create(GuidUtility.IsoOidNamespace, string.Concat(stream, x.SequenceNr));
-                        var json = JsonConvert.SerializeObject(x, _serializerSettings);
-                        var data = Encoding.UTF8.GetBytes(json);
-                        var meta = new byte[0];
-                        var payload = x.Payload;
-                        if (payload.GetType().GetProperty("Metadata") != null)
-                        {
-                            var propType = payload.GetType().GetProperty("Metadata").PropertyType;
-                            var metaJson = JsonConvert.SerializeObject(payload.GetType().GetProperty("Metadata").GetValue(x.Payload), propType, _serializerSettings);
-                            meta = Encoding.UTF8.GetBytes(metaJson);
-                        }
-                        return new EventData(eventId, x.GetType().FullName, true, data, meta);
-                    });
+                        var stream = grouping.Key;
 
-                    var connection = await GetConnection();
-                    await connection.AppendToStreamAsync(stream, expectedVersion < 0 ? ExpectedVersion.NoStream : expectedVersion, events);
-                }
-            }
-            catch (Exception e)
-            {
-                _log.Error(e, "Error writing messages to store");
-                throw;
-            }
+                        var representations = grouping.OrderBy(x => x.SequenceNr).ToArray();
+                        var expectedVersion = (int)representations.First().SequenceNr - 2;
+
+                        var events = representations.Select(x =>
+                        {
+                            var eventId = GuidUtility.Create(GuidUtility.IsoOidNamespace, string.Concat(stream, x.SequenceNr));
+                            var json = JsonConvert.SerializeObject(x, _serializerSettings);
+                            var data = Encoding.UTF8.GetBytes(json);
+                            var meta = new byte[0];
+                            var payload = x.Payload;
+                            if (payload.GetType().GetProperty("Metadata") != null)
+                            {
+                                var propType = payload.GetType().GetProperty("Metadata").PropertyType;
+                                var metaJson = JsonConvert.SerializeObject(payload.GetType().GetProperty("Metadata").GetValue(x.Payload), propType, _serializerSettings);
+                                meta = Encoding.UTF8.GetBytes(metaJson);
+                            }
+                            return new EventData(eventId, x.GetType().FullName, true, data, meta);
+                        });
+
+                        var connection = await GetConnection();
+                        await connection.AppendToStreamAsync(stream, expectedVersion < 0 ? ExpectedVersion.NoStream : expectedVersion, events);
+                    }
+                });
+            });
+
+            return await Task<IImmutableList<Exception>>
+                .Factory
+                .ContinueWhenAll(writeTasks.ToArray(),
+                    tasks => tasks.Select(t => t.IsFaulted ? TryUnwrapException(t.Exception) : null).ToImmutableList());
         }
 
         /// <summary>
@@ -170,8 +179,9 @@ namespace EventStore.Persistence
         /// <param name="toSequenceNr"></param>
         /// <param name="isPermanent"></param>
         /// <returns></returns>
-        protected override Task DeleteMessagesToAsync(string persistenceId, long toSequenceNr, bool isPermanent)
+        protected override Task DeleteMessagesToAsync(string persistenceId, long toSequenceNr)
         {
+            // no-op
             return Task.FromResult<object>(null);
         }
 
@@ -199,7 +209,7 @@ namespace EventStore.Persistence
 
             public override bool CanConvert(Type objectType)
             {
-                return typeof (IActorRef).IsAssignableFrom(objectType);
+                return typeof(IActorRef).IsAssignableFrom(objectType);
             }
         }
     }
