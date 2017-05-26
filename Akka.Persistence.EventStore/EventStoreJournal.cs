@@ -9,6 +9,7 @@ using Akka.Actor;
 using Akka.Event;
 using Akka.Persistence.Journal;
 using EventStore.ClientAPI;
+using EventStore.Persistence;
 using Newtonsoft.Json;
 
 namespace Akka.Persistence.EventStore

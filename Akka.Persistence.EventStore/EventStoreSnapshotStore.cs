@@ -93,7 +93,7 @@ namespace Akka.Persistence.EventStore
             var connection = await GetConnection();
             var streamName = GetStreamName(metadata.PersistenceId);
             var data = _serializer.ToBinary(new SelectedSnapshot(metadata, snapshot));
-            var eventData = new EventData(Guid.NewGuid(), typeof(Snapshot).Name, false, data, new byte[0]);
+            var eventData = new EventData(Guid.NewGuid(), typeof(Serialization.Snapshot).Name, false, data, new byte[0]);
 
             await connection.AppendToStreamAsync(streamName, ExpectedVersion.Any, eventData);
         }
