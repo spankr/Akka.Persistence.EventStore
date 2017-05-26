@@ -39,11 +39,11 @@
     <Reference Include="Akka.Logger.NLog, Version=1.2.0.6, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\Akka.Logger.NLog.1.2.0\lib\net45\Akka.Logger.NLog.dll</HintPath>
     </Reference>
-    <Reference Include="Akka.Persistence">
-      <HintPath>..\packages\Akka.Persistence.1.0.4.12-beta\lib\net45\Akka.Persistence.dll</HintPath>
+    <Reference Include="Akka.Persistence, Version=1.2.0.36, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Akka.Persistence.1.2.0.36-beta\lib\net45\Akka.Persistence.dll</HintPath>
     </Reference>
-    <Reference Include="Akka.Persistence.TestKit">
-      <HintPath>..\packages\Akka.Persistence.TestKit.1.0.4.12-beta\lib\net45\Akka.Persistence.TestKit.dll</HintPath>
+    <Reference Include="Akka.Persistence.TestKit, Version=1.2.0.36, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Akka.Persistence.TestKit.1.2.0.36-beta\lib\net45\Akka.Persistence.TestKit.dll</HintPath>
     </Reference>
     <Reference Include="Akka.TestKit, Version=1.2.0.33, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\Akka.TestKit.1.2.0\lib\net45\Akka.TestKit.dll</HintPath>
