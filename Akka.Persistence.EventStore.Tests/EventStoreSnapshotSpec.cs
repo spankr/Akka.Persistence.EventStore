@@ -1,22 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Akka.Actor;
-using Akka.TestKit;
-using Akka.Persistence;
-using Akka.Persistence.Journal;
+﻿using Akka.Persistence.TestKit.Snapshot;
 using Xunit;
-using Akka.Persistence.TestKit.Snapshot;
-using Akka.Configuration;
-
 
 namespace Akka.Persistence.EventStore.Tests
 {
-    public partial class EventStoreSnapshotSpec : SnapshotStoreSpec
+    [Collection("EventStore")]
+    public class EventStoreSnapshotSpec : SnapshotStoreSpec
     {
-        private static readonly Config SpecConfig = ConfigurationFactory.ParseString(@"
+        private static readonly string SpecConfig = @"
             akka {
                 stdout-loglevel = DEBUG
 	            loglevel = DEBUG
@@ -28,7 +18,7 @@ namespace Akka.Persistence.EventStore.Tests
                 snapshot-store {
                     plugin = ""akka.persistence.snapshot-store.event-store""
                     event-store {
-                        class = ""EventStore.Persistence.EventStoreSnapshotStore, Akka.Persistence.EventStore""
+                        class = ""Akka.Persistence.EventStore.EventStoreSnapshotStore, Akka.Persistence.EventStore""
                         plugin-dispatcher = ""akka.actor.default-dispatcher""
                         
                         # the event store connection string
@@ -39,11 +29,9 @@ namespace Akka.Persistence.EventStore.Tests
                     }
                 }
             }
-        }
-        ");
+        }";
 
-        public EventStoreSnapshotSpec()
-            : base(SpecConfig, "EventStoreSnapshotSpec")
+        public EventStoreSnapshotSpec() : base(SpecConfig, "EventStoreSnapshotSpec")
         {
             Initialize();
         }
@@ -56,5 +44,5 @@ namespace Akka.Persistence.EventStore.Tests
         }
     }
 
-     
+
 }

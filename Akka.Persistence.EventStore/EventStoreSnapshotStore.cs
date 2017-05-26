@@ -1,32 +1,32 @@
 ﻿using System;
 using System.Linq;
-using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using Akka.Event;
-using Akka.Persistence;
-using Akka.Persistence.Serialization;
 using Akka.Persistence.Snapshot;
 using Akka.Serialization;
 using EventStore.ClientAPI;
-using EventStore.ClientAPI.SystemData;
 using Newtonsoft.Json;
-using Akka.Persistence.EventStore;
 
-namespace EventStore.Persistence
+namespace Akka.Persistence.EventStore
 {
     public class EventStoreSnapshotStore : SnapshotStore
     {
-        private readonly Lazy<Task<IEventStoreConnection>> _connection;
-
-        private readonly Serializer _serializer;
-        private ILoggingAdapter _log;
+        private readonly ILoggingAdapter _log = Logging.GetLogger(Context);
         private readonly EventStorePersistenceExtension _extension;
+        private Lazy<Task<IEventStoreConnection>> _connection;
+        private Serializer _serializer;
 
         public EventStoreSnapshotStore()
         {
             _log = Context.GetLogger();
             _extension = EventStorePersistence.Instance.Apply(Context.System);
+        }
+
+        protected override void PreStart()
+        {
+            base.PreStart();
+
             var serialization = Context.System.Serialization;
             _serializer = serialization.FindSerializerForType(typeof(SelectedSnapshot));
 
@@ -93,21 +93,23 @@ namespace EventStore.Persistence
             var connection = await GetConnection();
             var streamName = GetStreamName(metadata.PersistenceId);
             var data = _serializer.ToBinary(new SelectedSnapshot(metadata, snapshot));
-            var eventData = new EventData(Guid.NewGuid(), typeof(Snapshot).Name, false, data, new byte[0]);
+            var eventData = new EventData(Guid.NewGuid(), typeof(Serialization.Snapshot).Name, false, data, new byte[0]);
 
             await connection.AppendToStreamAsync(streamName, ExpectedVersion.Any, eventData);
         }
 
-        protected override void Saved(SnapshotMetadata metadata)
-        {}
+        protected override Task DeleteAsync(SnapshotMetadata metadata)
+        {
+            // no-op
+            return Task.Run(() => { });
+        }
 
-        protected override void Delete(SnapshotMetadata metadata)
-        {}
+        protected override Task DeleteAsync(string persistenceId, SnapshotSelectionCriteria criteria)
+        {
+            // no-op
+            return Task.Run(() => { });
+        }
 
-        protected override void Delete(string persistenceId, SnapshotSelectionCriteria criteria)
-        {}
-
-        
         public class StreamMetadata
         {
             [JsonProperty("$maxCount")]
