@@ -164,7 +164,7 @@ namespace Akka.Persistence.EventStore
                         }).ToList(); // serilization issues don't bubble out from the AppentToStream call below, so enumerate the list before sending it to the call
 
                         var connection = await GetConnection();
-                        await connection.AppendToStreamAsync(stream, ExpectedVersion.Any, events);
+                        await connection.AppendToStreamAsync(stream, (int)expectedVersion, events);
                     }
                     exceptions.Add(null);
                 }
