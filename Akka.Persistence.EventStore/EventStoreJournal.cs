@@ -71,12 +71,7 @@ namespace Akka.Persistence.EventStore
 
                 var slice = await connection.ReadStreamEventsBackwardAsync(persistenceId, StreamPosition.End, 1, false);
 
-                long sequence = 0;
-
-                if (slice.Events.Any())
-                    sequence = slice.Events.First().OriginalEventNumber + 1;
-
-                return sequence;
+                return slice.LastEventNumber + 1;
             }
             catch (Exception e)
             {
@@ -188,9 +183,17 @@ namespace Akka.Persistence.EventStore
         protected override async Task DeleteMessagesToAsync(string persistenceId, long toSequenceNr)
         {
             var connection = await GetConnection();
-            var streamMetadataResult = await connection.GetStreamMetadataAsync(persistenceId);
-            var newMetadata = streamMetadataResult.StreamMetadata.Copy().SetTruncateBefore((int)toSequenceNr).Build();
-            await connection.SetStreamMetadataAsync(persistenceId, streamMetadataResult.MetastreamVersion, newMetadata);
+
+            if (toSequenceNr == Int64.MaxValue)
+            {   // delete the stream
+                await connection.DeleteStreamAsync(persistenceId, ExpectedVersion.Any);
+            }
+            else
+            {   // update truncate before id on stream metadata
+                var streamMetadataResult = await connection.GetStreamMetadataAsync(persistenceId);
+                var newMetadata = streamMetadataResult.StreamMetadata.Copy().SetTruncateBefore((int)toSequenceNr).Build();
+                await connection.SetStreamMetadataAsync(persistenceId, streamMetadataResult.MetastreamVersion, newMetadata);
+            }
         }
 
         class ActorRefConverter : JsonConverter
