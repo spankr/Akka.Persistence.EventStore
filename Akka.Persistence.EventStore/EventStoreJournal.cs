@@ -184,10 +184,12 @@ namespace Akka.Persistence.EventStore
         /// <param name="persistenceId"></param>
         /// <param name="toSequenceNr"></param>
         /// <returns></returns>
-        protected override Task DeleteMessagesToAsync(string persistenceId, long toSequenceNr)
+        protected override async Task DeleteMessagesToAsync(string persistenceId, long toSequenceNr)
         {
-            // no-op
-            return Task.Run(()=> { });
+            var connection = await GetConnection();
+            var streamMetadataResult = await connection.GetStreamMetadataAsync(persistenceId);
+            var newMetadata = streamMetadataResult.StreamMetadata.Copy().SetTruncateBefore((int)toSequenceNr).Build();
+            await connection.SetStreamMetadataAsync(persistenceId, streamMetadataResult.MetastreamVersion, newMetadata);
         }
 
         class ActorRefConverter : JsonConverter
