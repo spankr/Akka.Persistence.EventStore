@@ -94,7 +94,8 @@ namespace Akka.Persistence.EventStore
                 if (toSequenceNr > fromSequenceNr && max == toSequenceNr) max = toSequenceNr - fromSequenceNr + 1;
                 var connection = await GetConnection();
                 long count = 0;
-                var start = (fromSequenceNr - 1);
+                var start = fromSequenceNr - 1;
+                if (start < 0) start = 0;
                 var localBatchSize = _batchSize;
                 StreamEventsSlice slice;
                 do
