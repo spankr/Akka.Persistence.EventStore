@@ -15,7 +15,7 @@ namespace Akka.Persistence.EventStore.Tests
 
                 persistence {
 
-                publish-plugin-commands = off
+                publish-plugin-commands = on
                 journal {
                     plugin = ""akka.persistence.journal.event-store""
                     event-store {
@@ -31,6 +31,9 @@ namespace Akka.Persistence.EventStore.Tests
                 }
             }
         }";
+
+        // EventStore can't support writing an update that skips a sequence number
+        protected override bool SupportsRejectingNonSerializableObjects => false;
 
         public EventStoreJournalSpec() : base(SpecConfig, "EventStoreJournalSpec")
         {

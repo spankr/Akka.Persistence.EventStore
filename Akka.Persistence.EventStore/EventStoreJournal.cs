@@ -71,12 +71,7 @@ namespace Akka.Persistence.EventStore
 
                 var slice = await connection.ReadStreamEventsBackwardAsync(persistenceId, StreamPosition.End, 1, false);
 
-                long sequence = 0;
-
-                if (slice.Events.Any())
-                    sequence = slice.Events.First().OriginalEventNumber + 1;
-
-                return sequence;
+                return slice.LastEventNumber + 1;
             }
             catch (Exception e)
             {
@@ -94,7 +89,8 @@ namespace Akka.Persistence.EventStore
                 if (toSequenceNr > fromSequenceNr && max == toSequenceNr) max = toSequenceNr - fromSequenceNr + 1;
                 var connection = await GetConnection();
                 long count = 0;
-                int start = ((int)fromSequenceNr - 1);
+                var start = fromSequenceNr - 1;
+                if (start < 0) start = 0;
                 var localBatchSize = _batchSize;
                 StreamEventsSlice slice;
                 do
@@ -107,7 +103,7 @@ namespace Akka.Persistence.EventStore
                     {
                         localBatchSize = (int)max;
                     }
-                    slice = await connection.ReadStreamEventsForwardAsync(persistenceId, start, localBatchSize, false);
+                    slice = await connection.ReadStreamEventsForwardAsync(persistenceId, (int)start, localBatchSize, false);
 
                     foreach (var @event in slice.Events)
                     {
@@ -131,23 +127,22 @@ namespace Akka.Persistence.EventStore
 
         protected override async Task<IImmutableList<Exception>> WriteMessagesAsync(IEnumerable<Akka.Persistence.AtomicWrite> messages)
         {
-            var messageList = messages.ToList();
-            var writeTasks = messageList.Select(async message =>
+            var exceptions = new List<Exception>();
+            foreach (var message in messages)
             {
-                await Task.Run(async () =>
-                {
+                try
+                {                
                     var persistentMessages = ((IImmutableList<IPersistentRepresentation>)message.Payload).ToArray();
-
                     foreach (var grouping in persistentMessages.GroupBy(x => x.PersistenceId))
                     {
                         var stream = grouping.Key;
 
                         var representations = grouping.OrderBy(x => x.SequenceNr).ToArray();
-                        var expectedVersion = (int)representations.First().SequenceNr - 2;
+                        var expectedVersion = representations.First().SequenceNr - 2;
 
                         var events = representations.Select(x =>
                         {
-                            var eventId = GuidUtility.Create(GuidUtility.IsoOidNamespace, string.Concat(stream, x.SequenceNr));
+                            var eventId = Guid.NewGuid();
                             var json = JsonConvert.SerializeObject(x, _serializerSettings);
                             var data = Encoding.UTF8.GetBytes(json);
                             var meta = new byte[0];
@@ -155,22 +150,28 @@ namespace Akka.Persistence.EventStore
                             if (payload.GetType().GetProperty("Metadata") != null)
                             {
                                 var propType = payload.GetType().GetProperty("Metadata").PropertyType;
-                                var metaJson = JsonConvert.SerializeObject(payload.GetType().GetProperty("Metadata").GetValue(x.Payload), propType, _serializerSettings);
+                                var metaJson =
+                                    JsonConvert.SerializeObject(
+                                        payload.GetType().GetProperty("Metadata").GetValue(x.Payload), propType,
+                                        _serializerSettings);
                                 meta = Encoding.UTF8.GetBytes(metaJson);
                             }
                             return new EventData(eventId, x.GetType().FullName, true, data, meta);
-                        });
+                        }).ToList(); // serilization issues don't bubble out from the AppentToStream call below, so enumerate the list before sending it to the call
 
                         var connection = await GetConnection();
-                        await connection.AppendToStreamAsync(stream, expectedVersion < 0 ? ExpectedVersion.NoStream : expectedVersion, events);
+                        await connection.AppendToStreamAsync(stream, (int)expectedVersion, events);
                     }
-                });
-            });
+                    exceptions.Add(null);
+                }
+                catch (Exception e)
+                {
+                    exceptions.Add(e);
+                }
+            }
 
-            return await Task<IImmutableList<Exception>>
-                .Factory
-                .ContinueWhenAll(writeTasks.ToArray(),
-                    tasks => tasks.Select(t => t.IsFaulted ? TryUnwrapException(t.Exception) : null).ToImmutableList());
+
+            return exceptions.ToImmutableList();
         }
 
         /// <summary>
@@ -178,12 +179,21 @@ namespace Akka.Persistence.EventStore
         /// </summary>
         /// <param name="persistenceId"></param>
         /// <param name="toSequenceNr"></param>
-        /// <param name="isPermanent"></param>
         /// <returns></returns>
-        protected override Task DeleteMessagesToAsync(string persistenceId, long toSequenceNr)
+        protected override async Task DeleteMessagesToAsync(string persistenceId, long toSequenceNr)
         {
-            // no-op
-            return Task.Run(()=> { });
+            var connection = await GetConnection();
+
+            if (toSequenceNr == Int64.MaxValue)
+            {   // delete the stream
+                await connection.DeleteStreamAsync(persistenceId, ExpectedVersion.Any);
+            }
+            else
+            {   // update truncate before id on stream metadata
+                var streamMetadataResult = await connection.GetStreamMetadataAsync(persistenceId);
+                var newMetadata = streamMetadataResult.StreamMetadata.Copy().SetTruncateBefore((int)toSequenceNr).Build();
+                await connection.SetStreamMetadataAsync(persistenceId, streamMetadataResult.MetastreamVersion, newMetadata);
+            }
         }
 
         class ActorRefConverter : JsonConverter
@@ -202,6 +212,7 @@ namespace Akka.Persistence.EventStore
 
             public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
             {
+                if (reader.TokenType == JsonToken.Null) return null;
                 var value = reader.Value.ToString();
 
                 ActorSelection selection = _context.ActorSelection(value);
